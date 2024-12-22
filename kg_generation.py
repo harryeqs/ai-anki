@@ -89,12 +89,13 @@ class KGGenerator:
         password=os.getenv("NEO4J_PASSWORD"),
     )   
         self.refine_agent = ChatAgent(
+            system_message=REFINE_SYSTEM_PROMPT,
             model = ModelFactory.create(
             model_platform=ModelPlatformType.QWEN,
             model_type=ModelType.QWEN_TURBO,
             model_config_dict=QwenConfig(temperature=0.2).as_dict(),
         )
-        )
+    )
         self.kg_agent = KnowledgeGraphAgent(
             model = ModelFactory.create(
             model_platform=ModelPlatformType.QWEN,

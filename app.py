@@ -61,6 +61,7 @@ with gr.Blocks(title="File Processing System", theme=gr.themes.Soft()) as demo:
     gr.Markdown("""
     ## Supported File Types:
     - 🎵 Audio Files (.mp3, .wav, .ogg, .m4a, .flac, .aac, .wma, .aiff)
+                
     - 📄 PDF Files (.pdf)
     - 🖼️ Image Files (.jpg, .jpeg, .png, .gif, .bmp, .webp, .svg, .tiff)
     - 🔗 Web Links (URLs)
@@ -72,7 +73,8 @@ with gr.Blocks(title="File Processing System", theme=gr.themes.Soft()) as demo:
             file_types=[
                 ".mp3", ".wav", ".ogg", ".m4a", ".flac", ".aac", ".wma", ".aiff",
                 ".pdf",
-                ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg", ".tiff"
+                ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg", ".tiff",
+                ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".flv", ".webm", ".mpeg", ".mpg", ".3gp"
             ]
         )
         file_button = gr.Button("📤 Process File", variant="primary")

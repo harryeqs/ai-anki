@@ -1,4 +1,3 @@
-import io
 import logging
 import re
 import os
@@ -7,9 +6,11 @@ from camel.loaders import ChunkrReader, Firecrawl
 from camel.models import FishAudioModel
 from enum import Enum
 from dataclasses import dataclass
+from moviepy import VideoFileClip
 from PyPDF2 import PdfReader
-from typing import Optional, BinaryIO, List, Tuple
+from typing import BinaryIO
 from urllib.parse import urlparse
+from video_to_pdf import video_to_slides, slides_to_pdf
 
 from camel.agents import ChatAgent
 from camel.configs import QwenConfig
@@ -46,6 +47,7 @@ class FileType(Enum):
     PDF = "pdf"
     IMAGE = "image"
     WEBLINK = "weblink"
+    VIDEO = "video"
     UNKNOWN = "unknown"
 
     @classmethod
@@ -87,6 +89,10 @@ class FileType(Enum):
         # Image files
         if re.search(r'\.(jpg|jpeg|png|gif|bmp|webp|svg|tiff)$', filename):
             return cls.IMAGE
+        
+        # Video files
+        if re.search(r'\.(mp4|avi|mkv|mov|wmv|flv|webm|mpeg|mpg|3gp)$', filename):
+            return cls.VIDEO
 
         # Default to UNKNOWN
         return cls.UNKNOWN
@@ -134,6 +140,7 @@ class FileManager:
         self.pdf_reader = ChunkrReader()
         self.crawler = Firecrawl()
         self.image_processor = ImageProcessor(save_dir)
+        self.video_processor = VideoProcessor(save_dir)
 
     def _save_file(self, file: BinaryIO):
         os.makedirs(self.save_dir, exist_ok=True)
@@ -168,21 +175,21 @@ class FileManager:
                     pdf_text += page.extract_text() + "\n"
             result = pdf_text
 
-        output_path = os.path.join(pdf_file_path.replace('.pdf', '.txt'))
+        output_path = os.path.join(f"{pdf_file_path}.txt")
         with open(output_path, "w", encoding='utf-8') as f:
             f.write(result)
         logger.info(f"PDF processing complete, output saved to {output_path}")
 
-    def _process_audio(self, file: File, saved_path: str):
+    def _process_audio(self, saved_path: str):
         audio_file_path = saved_path
         audio_text = self.audio_model.speech_to_text(audio_file_path)
-        with open(os.path.join(self.save_dir, f"{file.name}.txt"), "w") as f:
+        with open(f"{audio_file_path}.txt", "w") as f:
             f.write(audio_text)
 
     def upload_file(self, file: BinaryIO):
         file_type = FileType.from_file(file)
 
-        if file_type in [FileType.AUDIO, FileType.PDF, FileType.IMAGE]:
+        if file_type in [FileType.AUDIO, FileType.PDF, FileType.IMAGE, FileType.VIDEO]:
             saved_path = self._save_file(file)
             logger.info(f"File saved to {saved_path}")
             if file_type == FileType.IMAGE:
@@ -190,8 +197,12 @@ class FileManager:
             elif file_type == FileType.PDF:
                 self._process_pdf(saved_path)
             elif file_type == FileType.AUDIO:
-                self._process_audio(File.from_upload(file), saved_path)
-
+                self._process_audio(saved_path)
+            elif file_type == FileType.VIDEO:
+                audio_path = self.video_processor.extract_audio(saved_path)
+                self._process_audio(audio_path)
+                pdf_path = self.video_processor.video_to_pdf(saved_path)
+                self._process_pdf(pdf_path)       
         elif file_type == FileType.WEBLINK:
             # Assuming 'file' contains the URL as bytes
             try:
@@ -249,4 +260,38 @@ class ImageProcessor:
         except Exception as e:
             logger.error(f"Failed to process image: {e}")
 
+class VideoProcessor:
+    def __init__(self, save_dir: str):
+        self.save_dir = save_dir
+    
+    def extract_audio(self, saved_path: str):
+        try:
+            video_clip = VideoFileClip(saved_path)
+            audio_clip = video_clip.audio
+            audio_path = f"{saved_path}.mp3"
+            audio_clip.write_audiofile(audio_path)
+            logger.info(f"Audio extracted and saved to {audio_path}")
+        except Exception as e:
+            logger.error(f"Failed to extract audio: {e}")
+
+        return audio_path
         
+    def video_to_pdf(self, video_path: str) -> str:
+        pdf_path = f"{video_path}.pdf"
+        try:    
+            output_folder_screenshot_path, saved_files = video_to_slides(video_path)
+            slides_to_pdf(video_path, output_folder_screenshot_path, saved_files)
+            logger.info(f"PDF processing complete, output saved to {pdf_path}")
+        except Exception as e:
+            logger.error(f"Failed to process video: {e}")
+        return pdf_path
+    
+    def merge_audio_and_pdf(self, audio_txt_path: str, pdf_txt_path: str):
+        with open(audio_txt_path, "r") as audio_file:
+            audio_text = audio_file.read()
+        with open(pdf_txt_path, "r") as pdf_file:
+            pdf_text = pdf_file.read()
+        # remove the audio and pdf files
+        os.remove(audio_txt_path)
+        os.remove(pdf_txt_path)
+        return f"Audio: \n{audio_text}\nPDF: \n{pdf_text}"
