@@ -11,7 +11,7 @@ from PyPDF2 import PdfReader
 from typing import BinaryIO
 from urllib.parse import urlparse
 from video_to_pdf import video_to_slides, slides_to_pdf
-
+from docling.document_converter import DocumentConverter
 from camel.agents import ChatAgent
 from camel.configs import QwenConfig
 from camel.messages import BaseMessage
@@ -35,7 +35,7 @@ from dataclasses import dataclass
 from typing import BinaryIO
 from urllib.parse import urlparse
 
-from camel.loaders import ChunkrReader, Firecrawl
+from camel.loaders import Firecrawl
 from camel.models import FishAudioModel
 
 # Assuming ImageProcessor is defined elsewhere as per your initial code
@@ -137,7 +137,7 @@ class FileManager:
     def __init__(self, save_dir: str = "uploads"):
         self.save_dir = save_dir
         self.audio_model = FishAudioModel()
-        self.pdf_reader = ChunkrReader()
+        self.pdf_converter = DocumentConverter()
         self.crawler = Firecrawl()
         self.image_processor = ImageProcessor(save_dir)
         self.video_processor = VideoProcessor(save_dir)
@@ -163,9 +163,8 @@ class FileManager:
     def _process_pdf(self, pdf_file_path: str):
         pdf_text = ""
         try:
-            task_id = self.pdf_reader.submit_task(pdf_file_path)
-            logger.info(f"Submitted PDF processing task with ID: {task_id}")
-            result = self.pdf_reader.get_task_output(task_id)
+            converter = DocumentConverter()
+            result = converter.convert(pdf_file_path)
         except Exception as e:
             logger.warning(f"ChunkrReader failed, using PyPDF2 fallback: {e}")
             # Fallback to PyPDF2
@@ -218,6 +217,16 @@ class FileManager:
                     f.write(result['markdown'])
             except Exception as e:
                 logger.error(f"Failed to process weblink: {e}")
+
+    def concatenate_texts(self):
+        files = [os.path.join(self.save_dir, file) for file in os.listdir(self.save_dir) if file.endswith('.txt')]
+        texts = []
+        for file in files:
+            with open(file, "r") as f:
+                texts.append(f'{file}: \n{f.read()}')
+            concatenated_text = "\n".join(texts)
+        with open(os.path.join(self.save_dir, "concatenated.txt"), "w") as f:
+            f.write(concatenated_text)
 
 class ImageProcessor:
     def __init__(self, save_dir: str):
@@ -277,7 +286,7 @@ class VideoProcessor:
         return audio_path
         
     def video_to_pdf(self, video_path: str) -> str:
-        pdf_path = f"{video_path}.pdf"
+        pdf_path = f"{video_path.replace('.mp4', '.pdf')}"
         try:    
             output_folder_screenshot_path, saved_files = video_to_slides(video_path)
             slides_to_pdf(video_path, output_folder_screenshot_path, saved_files)
