@@ -3,3 +3,4 @@ Pillow
 python-dotenv
 PyPDF2
 camel-ai[all]
+docling
